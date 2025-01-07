@@ -1,0 +1,21 @@
+path: /workspace/datasets/yolodata  # dataset root dir
+train: images/train  # train images (relative to 'path') 4 images
+val: images/val  # val images (relative to 'path') 4 images
+# test:  # test images (optional)
+
+# Classes (80 COCO classes)
+names:
+  0: unknown
+  1: red
+  2: green
+  3: yellow
+  4: go_straight
+  5: turn_left
+  6: turn_right
+  7: no_left_turn
+  8: no_right_turn
+  9: u_turn
+  10: no_u_turn
+  11: slight_left
+  12: slight_right
+  13: road_sign
