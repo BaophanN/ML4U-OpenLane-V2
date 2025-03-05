@@ -12,11 +12,7 @@ import warnings
 from os import path as osp
 
 import sys
-<<<<<<< HEAD
-sys.path.insert(0, '/workspace/source/ML4U-OpenLane-V2')
-=======
-sys.path.insert(0, '/workspace/source/Mapless')
->>>>>>> 06e1c1a6379e75fc045ae2e2b10a6e8029baa6f4
+sys.path.insert(0, os.getcwd())
 import mmcv
 import torch
 import torch.distributed as dist
