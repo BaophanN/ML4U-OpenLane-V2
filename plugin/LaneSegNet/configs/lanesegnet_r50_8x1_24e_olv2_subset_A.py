@@ -21,7 +21,7 @@ num_cams = 7
 pts_dim = 3
 
 dataset_type = 'OpenLaneV2_subset_A_LaneSegNet_Dataset'
-data_root = 'data/datasets/'
+data_root = '/workspace/datasets/OpenLane-V2/'
 
 para_method = 'fix_pts_interp'
 method_para = dict(n_points=10)
@@ -234,7 +234,7 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'data_dict_subset_A_train_lanesegnet.pkl',
+        ann_file=data_root + 'data_dict_subset_A_val_lanesegnet.pkl',
         pipeline=train_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -255,7 +255,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=data_root + 'data_dict_subset_A_val_lanesegnet.pkl',
+        ann_file=data_root + 'data_dict_subset_A_test_lanesegnet.pkl',
         pipeline=test_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -303,4 +303,4 @@ workflow = [('train', 1)]
 
 # NOTE: `auto_scale_lr` is for automatically scaling LR,
 # base_batch_size = (8 GPUs) x (1 samples per GPU)
-auto_scale_lr = dict(base_batch_size=2)
+auto_scale_lr = dict(base_batch_size=8)

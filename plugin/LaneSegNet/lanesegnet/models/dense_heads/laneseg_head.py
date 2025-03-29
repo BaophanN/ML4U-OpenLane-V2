@@ -254,6 +254,8 @@ class LaneSegHead(AnchorFreeHead):
         """
         dtype = mlvl_feats[0].dtype
         object_query_embeds = self.query_embedding.weight.to(dtype)
+
+        # !TODO: replace img_metas here 
         outputs = self.transformer(
             mlvl_feats,
             bev_feats,
@@ -269,6 +271,7 @@ class LaneSegHead(AnchorFreeHead):
         hs = hs.permute(0, 2, 1, 3)
 
         if not self.training:
+            # inference mode 
             reference = inter_references[-1]
             reference = inverse_sigmoid(reference)
             assert reference.shape[-1] == self.pts_dim
@@ -276,9 +279,7 @@ class LaneSegHead(AnchorFreeHead):
             outputs_class = self.cls_branches[-1](hs[-1])
             output_left_type = self.cls_left_type_branches[-1](hs[-1])
             output_right_type = self.cls_right_type_branches[-1](hs[-1])
-            print('outputs_class', outputs_class)
-            print('output_left_type', output_left_type)
-            print('output_right_type', output_right_type)
+
            
 
             tmp = self.reg_branches[-1](hs[-1])
@@ -286,7 +287,6 @@ class LaneSegHead(AnchorFreeHead):
             tmp = tmp.view(bs, num_query, -1, self.pts_dim)
             tmp = tmp + reference
             tmp = tmp.sigmoid()
-            print('tmp', tmp.shape)
 
             coord = tmp.clone()
             coord[..., 0] = coord[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0]
@@ -307,7 +307,7 @@ class LaneSegHead(AnchorFreeHead):
             outputs_coords = torch.stack([torch.cat([centerline, left_laneline, right_laneline], axis=-1)])
             output_left_types = torch.stack([output_left_type])
             output_right_types = torch.stack([output_right_type])
-            print('outputs_mask', outputs_mask.shape)
+            # print('outputs_mask', outputs_mask.shape)
 
             outs = {
                 'all_cls_scores': outputs_classes,
@@ -356,13 +356,165 @@ class LaneSegHead(AnchorFreeHead):
             offset = self.reg_branches_offset[lvl](hs[lvl])
             left_laneline = centerline + offset
             right_laneline = centerline - offset
-            print('offset', offset.shape)
-            print('left_laneline', left_laneline.shape)
-            print('right_laneline', right_laneline.shape)
+            # print('offset', offset.shape)
+            # print('left_laneline', left_laneline.shape)
+            # print('right_laneline', right_laneline.shape)
 
             # segmentation head
             outputs_mask = self._forward_mask_head(hs[lvl], bev_feats, lvl)
-            print('outputs_mask', outputs_mask.shape)
+            # print('outputs_mask', outputs_mask.shape)
+
+            outputs_classes.append(outputs_class)
+            outputs_coord.append(torch.cat([centerline, left_laneline, right_laneline], axis=-1))
+            outputs_masks.append(outputs_mask)
+            output_left_types.append(output_left_type)
+            output_right_types.append(output_right_type)
+
+        outputs_classes = torch.stack(outputs_classes)
+        outputs_coords = torch.stack(outputs_coord)
+        outputs_masks = torch.stack(outputs_masks)
+        output_left_types = torch.stack(output_left_types)
+        output_right_types = torch.stack(output_right_types)        
+
+        outs = {
+            'all_cls_scores': outputs_classes,
+            'all_lanes_preds': outputs_coords,
+            'all_mask_preds': outputs_masks,
+            'all_lanes_left_type': output_left_types,
+            'all_lanes_right_type': output_right_types,
+            'history_states': hs
+        }
+
+        return outs
+
+    @auto_fp16(apply_to=('mlvl_feats'))
+    def forward_trt(self, mlvl_feats, bev_feats,can_bus, lidar2img):
+
+        """Forward function.
+        Args:
+            mlvl_feats (tuple[Tensor]): Features from the upstream
+                network, each is a 5D-tensor with shape
+                (B, N, C, H, W).
+            prev_bev: previous bev featues
+            only_bev: only compute BEV features with encoder. 
+        Returns:
+            all_cls_scores (Tensor): Outputs from the classification head, \
+                shape [nb_dec, bs, num_query, cls_out_channels]. Note \
+                cls_out_channels should includes background.
+            all_lanes_preds (Tensor): Sigmoid outputs from the regression \
+                head with normalized coordinate format (cx, cy, w, l, cz, h, theta, vx, vy). \
+                Shape [nb_dec, bs, num_query, 99].
+            all_mask_preds (Tensor): Sigmoid outputs from the segmentation \
+                head with normalized value in the range of [0,1].
+                Shape []
+        """
+        dtype = mlvl_feats[0].dtype
+        object_query_embeds = self.query_embedding.weight.to(dtype)
+
+        # !TODO: replace img_metas here. Rewrite forward of LaneSegTransformer
+        outputs = self.transformer.forward_trt(
+            mlvl_feats,
+            bev_feats,
+            object_query_embeds,
+            bev_h=self.bev_h,
+            bev_w=self.bev_w,
+            cls_branches=None,
+            reg_branches=(self.reg_branches, self.reg_branches_offset) if self.with_box_refine else None,  # noqa:E501
+        )
+
+        print("LaneSegHead")  
+        hs, init_reference, inter_references = outputs
+        hs = hs.permute(0, 2, 1, 3)
+
+        if not self.training:
+            # inference mode 
+            reference = inter_references[-1]
+            reference = inverse_sigmoid(reference)
+            assert reference.shape[-1] == self.pts_dim
+
+            outputs_class = self.cls_branches[-1](hs[-1])
+            output_left_type = self.cls_left_type_branches[-1](hs[-1])
+            output_right_type = self.cls_right_type_branches[-1](hs[-1])
+
+           
+
+            tmp = self.reg_branches[-1](hs[-1])
+            bs, num_query, _ = tmp.shape
+            tmp = tmp.view(bs, num_query, -1, self.pts_dim)
+            tmp = tmp + reference
+            tmp = tmp.sigmoid()
+
+            coord = tmp.clone()
+            coord[..., 0] = coord[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0]
+            coord[..., 1] = coord[..., 1] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1]
+            if self.pts_dim == 3:
+                coord[..., 2] = coord[..., 2] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2]
+            centerline = coord.view(bs, num_query, -1).contiguous()
+
+            offset = self.reg_branches_offset[-1](hs[-1])
+            left_laneline = centerline + offset
+            right_laneline = centerline - offset
+
+            # segmentation head
+            if self.pred_mask:
+                outputs_mask = self._forward_mask_head(hs[-1], bev_feats, -1)
+
+            outputs_classes = torch.stack([outputs_class])
+            outputs_coords = torch.stack([torch.cat([centerline, left_laneline, right_laneline], axis=-1)])
+            output_left_types = torch.stack([output_left_type])
+            output_right_types = torch.stack([output_right_type])
+            # print('outputs_mask', outputs_mask.shape)
+
+            outs = {
+                'all_cls_scores': outputs_classes,
+                'all_lanes_preds': outputs_coords,
+                'all_mask_preds': torch.stack([outputs_mask]) if self.pred_mask else None,
+                'all_lanes_left_type': output_left_types,
+                'all_lanes_right_type': output_right_types,
+                'history_states': hs
+            }
+
+            return outs
+
+        outputs_classes = []
+        outputs_coord = []
+        outputs_masks = []
+        output_left_types = []
+        output_right_types = []
+        for lvl in range(hs.shape[0]):
+            if lvl == 0:
+                reference = init_reference
+            else:
+                reference = inter_references[lvl - 1]
+            reference = inverse_sigmoid(reference)
+            assert reference.shape[-1] == self.pts_dim
+
+            outputs_class = self.cls_branches[lvl](hs[lvl])
+            output_left_type = self.cls_left_type_branches[lvl](hs[lvl])
+            output_right_type = self.cls_right_type_branches[lvl](hs[lvl])
+            print('outputs_class', outputs_class.shape)
+            print('output_left_type',output_left_type.shape)
+            print('output_right_type', output_right_type.shape)
+
+            tmp = self.reg_branches[lvl](hs[lvl])
+            bs, num_query, _ = tmp.shape
+            tmp = tmp.view(bs, num_query, -1, self.pts_dim)
+            tmp = tmp + reference
+            tmp = tmp.sigmoid()
+
+            coord = tmp.clone()
+            coord[..., 0] = coord[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0]
+            coord[..., 1] = coord[..., 1] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1]
+            if self.pts_dim == 3:
+                coord[..., 2] = coord[..., 2] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2]
+            centerline = coord.view(bs, num_query, -1).contiguous()
+
+            offset = self.reg_branches_offset[lvl](hs[lvl])
+            left_laneline = centerline + offset
+            right_laneline = centerline - offset
+
+            # segmentation head
+            outputs_mask = self._forward_mask_head(hs[lvl], bev_feats, lvl)
 
             outputs_classes.append(outputs_class)
             outputs_coord.append(torch.cat([centerline, left_laneline, right_laneline], axis=-1))
@@ -688,7 +840,7 @@ class LaneSegHead(AnchorFreeHead):
         return loss_dict, assign_result
 
     @force_fp32(apply_to=('preds_dicts'))
-    def get_lanes(self, preds_dicts, img_metas, rescale=False):
+    def get_lanes(self, preds_dicts, img_metas=None, rescale=False):
         """Generate bboxes from bbox head predictions.
         Args:
             preds_dicts (tuple[list[dict]]): Prediction results.

@@ -1,5 +1,5 @@
 _base_ = []
-custom_imports = dict(imports=['plugin.LaneSegNet_FastBEV.bevformer', 'plugin.LaneSegNet_FastBEV.lanesegnet'])
+custom_imports = dict(imports=['plugin.LaneSegNet.bevformer', 'plugin.LaneSegNet.lanesegnet'])
 
 # If point cloud range is changed, the models should also change their point
 # cloud range accordingly
@@ -10,7 +10,7 @@ img_norm_cfg = dict(
 
 class_names = ['lane_segment', 'ped_crossing']
 class_nums = len(class_names)
-find_unused_parameters=True
+
 input_modality = dict(
     use_lidar=False,
     use_camera=True,
@@ -42,11 +42,19 @@ _ffn_cfg_ = dict(
 _num_levels_ = 4
 bev_h_ = 100
 bev_w_ = 200
-# _check_point_ = 'work_dirs/LaneSegNet_FastBEV/lanesegnet_r18_1x1_1e_olv2_subset_A/epoch_1.pth'
+
+grid_config = {
+    'x': [-51.2, 51.2, 0.8],
+    'y': [-51.2, 51.2, 0.8],
+    'z': [-2.5, 4.5, 1.0],
+    'depth': [1.0, 60.0, 1.0],
+}
+voxel_size = [0.1, 0.1, 0.2]
+
+numC_Trans = 64
 
 model = dict(
     type='LaneSegNet',
-    # init_cfg=dict(type='Pretrained', checkpoint=_check_point_),
     img_backbone=dict(
         type='ResNet',
         depth=18,
@@ -58,29 +66,84 @@ model = dict(
         style='pytorch',
         init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet18')),
     img_neck=dict(
-        type='FPN',
-        in_channels=[128,256,512],
-        out_channels=_dim_,
-        start_level=0,
-        add_extra_convs='on_output',
-        num_outs=_num_levels_,
-        relu_before_extra_convs=True),
-    neck_fuse=dict(
-        type='ConvModule',
-        in_channels=256, 
-        out_channels=64,
-        kernel_size=3,
-        stride=1,
-        padding=1,),      
-    neck_3d=dict(
-        type='M2BevNeck',
-        in_channels=64*4,
+        type='CustomFPN',
+        in_channels=[1024, 2048],
         out_channels=256,
-        num_layers=2,
-        stride=2,
-        is_transpose=False,
-        fuse=dict(in_channels=64*4*4, out_channels=64*4),
-        norm_cfg=dict(type='BN', requires_grad=True)),  
+        num_outs=1,
+        start_level=0,
+        out_ids=[0]),
+    img_view_transformer=dict(
+        type='FastrayTransformer',
+        grid_config=grid_config,
+        in_channels=256,
+        out_channels=numC_Trans,
+        image_size=[256, 704],
+        feature_size=[16, 44],
+        downsample=1,
+        stride=16,
+        fuse=dict(type='sum')),
+    img_bev_encoder_backbone=dict(
+        type='CustomResNet',
+        numC_input=numC_Trans,
+        num_channels=[numC_Trans * 2, numC_Trans * 4, numC_Trans * 8]),
+    img_bev_encoder_neck=dict(
+        type='FPN_LSS',
+        in_channels=numC_Trans * 8 + numC_Trans * 2,
+        out_channels=256),
+    # img_neck=dict(
+    #     type='FPN',
+    #     in_channels=[128,256,512],
+    #     out_channels=_dim_,
+    #     start_level=0,
+    #     add_extra_convs='on_output',
+    #     num_outs=_num_levels_,
+    #     relu_before_extra_convs=True),
+    # bev_constructor=dict(
+    #     type='BEVFormerConstructer',
+    #     num_feature_levels=_num_levels_,
+    #     num_cams=num_cams,
+    #     embed_dims=_dim_,
+    #     rotate_prev_bev=True,
+    #     use_shift=True,
+    #     use_can_bus=True,
+    #     pc_range=point_cloud_range,
+    #     bev_h=bev_h_,
+    #     bev_w=bev_w_,
+    #     rotate_center=[bev_h_//2, bev_w_//2],
+    #     encoder=dict(
+    #         type='BEVFormerEncoder',
+    #         num_layers=3,
+    #         pc_range=point_cloud_range,
+    #         num_points_in_pillar=4,
+    #         return_intermediate=False,
+    #         transformerlayers=dict(
+    #             type='BEVFormerLayer',
+    #             attn_cfgs=[
+    #                 dict(
+    #                     type='TemporalSelfAttention',
+    #                     embed_dims=_dim_,
+    #                     num_levels=1),
+    #                 dict(
+    #                     type='SpatialCrossAttention',
+    #                     embed_dims=_dim_,
+    #                     num_cams=num_cams,
+    #                     pc_range=point_cloud_range,
+    #                     deformable_attention=dict(
+    #                         type='MSDeformableAttention3D',
+    #                         embed_dims=_dim_,
+    #                         num_points=8,
+    #                         num_levels=_num_levels_)
+    #                 )
+    #             ],
+    #             ffn_cfgs=_ffn_cfg_,
+    #             operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+    #                              'ffn', 'norm'))),
+    #     positional_encoding=dict(
+    #         type='LearnedPositionalEncoding',
+    #         num_feats=_pos_dim_,
+    #         row_num_embed=bev_h_,
+    #         col_num_embed=bev_w_),
+    # ),
     lane_head=dict(
         type='LaneSegHead',
         num_classes=class_nums,
@@ -160,9 +223,6 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=5)),
-    multi_scale_id=[0],
-    n_voxels=[[200,400,4]],
-    voxel_size=[[0.5,0.5,1.5]],
     # model training and testing settings
     train_cfg=dict(
         lane=dict(
@@ -175,36 +235,12 @@ model = dict(
                 pc_range=point_cloud_range))))
 
 train_pipeline = [
-    dict(type='CustomLoadMultiViewImageFromFiles', to_float32=True), # load here 
+    dict(type='CustomLoadMultiViewImageFromFiles', to_float32=True),
     dict(type='LoadAnnotations3DLaneSegment',
          with_lane_3d=True, with_lane_label_3d=True, with_lane_adj=True, with_lane_type=True,
          with_bbox=False, with_label=False, with_lane_lste_adj=False),
     dict(type='PhotoMetricDistortionMultiViewImage'),
-
-    # """
-    # dict(
-    #     type='LoadPointsFromFile',
-    #     dummy=True,
-    #     coord_type='LIDAR',
-    #     load_dim=5,
-    #     use_dim=5),
-    # dict(
-    #     type='RandomFlip3D',
-    #     flip_2d=False,
-    #     sync_2d=False,
-    #     flip_ratio_bev_horizontal=0.5,
-    #     flip_ratio_bev_vertical=0.5,
-    #     update_img2lidar=True),
-    # dict(
-    #     type='GlobalRotScaleTrans',
-    #     rot_range=[-0.3925, 0.3925],
-    #     scale_ratio_range=[0.95, 1.05],
-    #     translation_std=[0.05, 0.05, 0.05],
-    #     update_img2lidar=True),
-    # dict(type='RandomAugImageMultiViewImage', data_config=data_config),   
-    # """
     dict(type='CropFrontViewImageForAv2'),
-    # how to add augmentation function 
     dict(type='RandomScaleImageMultiViewImage', scales=[0.5]),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
     dict(type='PadMultiViewImageSame2Max', size_divisor=32),
@@ -219,14 +255,6 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type='CustomLoadMultiViewImageFromFiles', to_float32=True),
-# """
-#     dict(
-#         type='LoadPointsFromFile',
-#         dummy=True,
-#         coord_type='LIDAR',
-#         load_dim=5,
-#         use_dim=5),
-# """
     dict(type='CropFrontViewImageForAv2'),
     dict(type='RandomScaleImageMultiViewImage', scales=[0.5]),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
@@ -237,12 +265,11 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         data_root=data_root,
         ann_file=data_root + 'data_dict_subset_A_train_lanesegnet.pkl',
-        # ann_file=data_root + 'data_dict_sample_train_lanesegnet.pkl',
         pipeline=train_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -254,7 +281,6 @@ data = dict(
         type=dataset_type,
         data_root=data_root,
         ann_file=data_root + 'data_dict_subset_A_val_lanesegnet.pkl',
-        # ann_file=data_root + 'data_dict_sample_train_lanesegnet.pkl',
         pipeline=test_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -265,7 +291,6 @@ data = dict(
         type=dataset_type,
         data_root=data_root,
         ann_file=data_root + 'data_dict_subset_A_val_lanesegnet.pkl',
-        # ann_file=data_root + 'data_dict_sample_train_lanesegnet.pkl',
         pipeline=test_pipeline,
         classes=class_names,
         modality=input_modality,
@@ -277,7 +302,6 @@ data = dict(
 optimizer = dict(
     type='AdamW',
     lr=2e-4,
-    # lr=1.991e-04,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -292,8 +316,8 @@ lr_config = dict(
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
-total_epochs = 12
-evaluation = dict(interval=12, pipeline=test_pipeline)
+total_epochs = 24
+evaluation = dict(interval=24, pipeline=test_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
 log_config = dict(
@@ -314,4 +338,4 @@ workflow = [('train', 1)]
 
 # NOTE: `auto_scale_lr` is for automatically scaling LR,
 # base_batch_size = (8 GPUs) x (1 samples per GPU)
-auto_scale_lr = dict(base_batch_size=4)
+auto_scale_lr = dict(base_batch_size=1)

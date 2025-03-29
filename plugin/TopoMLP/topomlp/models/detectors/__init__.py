@@ -1,1 +1,0 @@
-from .topomlp import TopoMLP

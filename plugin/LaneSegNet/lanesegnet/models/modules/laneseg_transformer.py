@@ -93,3 +93,50 @@ class LaneSegNetTransformer(BaseModule):
         print('inter_references_out', inter_references_out.shape)
 
         return inter_states, init_reference_out, inter_references_out
+
+    @auto_fp16(apply_to=('mlvl_feats', 'bev_queries', 'object_query_embed', 'prev_bev', 'bev_pos'))
+    def forward_trt(self,
+                mlvl_feats,
+                bev_embed, # bev_feats after embedded 
+                object_query_embed,
+                bev_h,
+                bev_w,
+                reg_branches=None,
+                cls_branches=None,
+                **kwargs):
+
+        bs = mlvl_feats[0].size(0)
+        query_pos, query = torch.split(
+            object_query_embed, self.embed_dims, dim=1)
+
+        query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)
+        query = query.unsqueeze(0).expand(bs, -1, -1)
+        reference_points = self.reference_points(query_pos)
+
+
+        # ident init: repeat reference points to num points
+        reference_points = reference_points.repeat(1, 1, self.points_num)
+        reference_points = reference_points.sigmoid()
+        bs, num_query, _ = reference_points.shape
+        reference_points = reference_points.view(bs, num_query, self.points_num, self.pts_dim)
+
+        init_reference_out = reference_points
+
+        query = query.permute(1, 0, 2)
+        query_pos = query_pos.permute(1, 0, 2)
+        bev_embed = bev_embed.permute(1, 0, 2)
+        inter_states, inter_references = self.decoder.forward_trt(
+            query=query,
+            key=None,
+            value=bev_embed,
+            query_pos=query_pos,
+            reference_points=reference_points,
+            reg_branches=reg_branches,
+            cls_branches=cls_branches,
+            spatial_shapes=torch.tensor([[bev_h, bev_w]], device=query.device),
+            level_start_index=torch.tensor([0], device=query.device),
+            **kwargs)
+
+        inter_references_out = inter_references
+
+        return inter_states, init_reference_out, inter_references_out

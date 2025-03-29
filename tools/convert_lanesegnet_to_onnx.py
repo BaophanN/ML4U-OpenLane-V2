@@ -40,11 +40,15 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-
+def prepare_img_metas(img_metas): 
+    can_bus = [each['can_bus'] for each in img_metas]
+    lidar2global_rotation = [each['lidar2global_rotation'] for each in img_metas]
+    # print(type(can_bus), type(lidar2global_rotation))
+    # exit()
+    return can_bus, lidar2global_rotation
 def main():
     args = parse_args()
     
-    # Create directory if it doesn't exist
     if not os.path.exists(args.work_dir):
         os.makedirs(args.work_dir)
 
@@ -55,7 +59,7 @@ def main():
     print(cfg.model.type)
     cfg.gpu_ids = [0]
     test_dataloader_default_args = dict(
-        samples_per_gpu=1, workers_per_gpu=2, dist=False, shuffle=False)
+        samples_per_gpu=1, workers_per_gpu=0, dist=False, shuffle=False)
     # Modify data pipeline for testing
     if isinstance(cfg.data.test, dict):
         cfg.data.test.test_mode = True
@@ -68,7 +72,7 @@ def main():
         **test_dataloader_default_args,
         **cfg.data.get('test_dataloader', {})
     }
-    # Build dataset and dataloader
+
     dataset = build_dataset(cfg.data.test)
     
     dataloader = build_dataloader(dataset, **test_loader_cfg)
@@ -76,36 +80,32 @@ def main():
     # Load LaneSegNet model
     model = build_model(cfg.model, test_cfg=cfg.get('test_cfg'))
     load_checkpoint(model, args.checkpoint, map_location='cpu')
+    model.forward = model.forward_trt
     model.cuda().eval()
 
-    # Select first batch for ONNX export
     for i, data in enumerate(dataloader):
 
-        # print(data['img']) 
         img_metas = data['img_metas'].data[0]
         img = data['img'].data[0] # Extract first image batch
-        # print(img_metas)
-        # for var, name in [(img_metas, 'img_metas')]:
-        #     if not isinstance(var, list):
-        #         raise TypeError('{} must be a list, but got {}'.format(
-        #             name, type(var)))
-        # print('type:', [each['can_bus'][:3] for each in img_metas])
-        # delta_global = np.array([each['can_bus'][:3] for each in img_metas])# what is can_bus 
-        # exit()
-        if isinstance(img_metas, DataContainer):
-            img_metas = img_metas.data  
-        # print('0:',img.data[0].shape)
+        # print(type(img))
+        # img_metas = model.prepare_img_metas(img_metas)
+        can_bus, lidar2global_rotation = prepare_img_metas(img_metas)
+
+        for var, name in [(img_metas, 'img_metas')]:
+            if not isinstance(var, list):
+                raise TypeError('{} must be a list, but got {}'.format(
+                    name, type(var)))
+
         
         """
         1 sample data: 7 images + meta data 
         """
         # print(type(img.float()));exit()
+        # img = torch.from_numpy(img).float().cuda()
+        # can_bus = torch.from_numpy(can_bus).float().cuda()
+        # lidar2global_rotation = torch.from_numpy(lidar2global_rotation).float().cuda()
         with torch.no_grad():
-            # Perform inference
-            # original_img = img.clone().detach()
-            # outs = model(img_metas, img)
-            # ONNX export inputs
-            # output_names = ["lane_results", "lsls_results"] # not sure 
+
             output_names = ['all_cls_scores'
                         'all_lanes_preds',
                         'all_mask_preds',
@@ -118,16 +118,17 @@ def main():
             if args.dynamic:
                 print("✅ Enabling dynamic batch size for ONNX export")
 
-            # Export to ONNX
-            # print('huhu:',img.shape)
-            # exit()
+
             onnx_path = os.path.join(args.work_dir, f"{args.prefix}.onnx")
             torch.onnx.export(
                 model,
-                (img.float().contiguous(),img_metas,),
+                # (img),
+                (img, can_bus, lidar2global_rotation,), 
+                'lanesegnet.onnx',
                 onnx_path,
                 opset_version=11,
-                input_names=['img'],
+                # input_names=['img'],
+                input_names=['img', 'can_bus','lidar2global_rotation'],
                 output_names=output_names,
                 dynamic_axes=dynamic_axes if args.dynamic else None
             )

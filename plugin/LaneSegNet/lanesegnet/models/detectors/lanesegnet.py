@@ -14,6 +14,7 @@ from mmdet.models.builder import build_head
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 
 from ...utils.builder import build_bev_constructor
+
 @DETECTORS.register_module()
 class LaneSegNet(MVXTwoStageDetector):
 
@@ -155,6 +156,8 @@ class LaneSegNet(MVXTwoStageDetector):
 
         img_metas = [each[len_queue-1] for each in img_metas]
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
+
+        # print(img_metas);exit()
         bev_feats = self.bev_constructor(img_feats, img_metas, prev_bev)
 
         losses = dict()
@@ -262,16 +265,26 @@ class LaneSegNetTRT(LaneSegNet):
                     'history_states']:
             outs_.append(outs[key])
         return outs_
+    def prepare_img_metas(self, img_metas): 
+        # export to onnx with batchsize 1
+        # print(len(img_metas));exit()
+        img_metas_tensors = [] 
+        for key, value in img_metas[0].items(): 
+            if isinstance(value, list): 
+                value_tensors = [torch.tensor(item, dtype=torch.float32) if isinstance(item, np.ndarray) else item for item in value] 
+            elif isinstance(value, np.ndarray): 
+                img_metas_tensors.append(torch.tensor(value, dtype=torch.float32)) 
+            else:
+                img_metas_tensors.append(value)
+        return img_metas_tensors
 
-    def forward(
+    def forward_trt(
         self,
-        img_metas, 
-        img=None,
-        prev_bev=None, 
-        rescale=False 
+        img,
+        can_bus,
+        lidar2global_rotation,
     ):
-        # Write everything out explicitly 
-        ####### extract feat function 
+        rescale=False
         B = img.size(0)
         if img is not None: 
             if img.dim() == 5 and img.size(0) == 1: 
@@ -279,12 +292,6 @@ class LaneSegNetTRT(LaneSegNet):
             elif img.dim() == 5 and img.size(0) > 1: 
                 B,N,C,H,W = img.size() 
                 img = img.reshape(B*N, C, H, W) 
-
-        # print('1:',img.data[0].shape)
-        # img_feats = self.extract_feat(img=img, img_metas=img_metas) 
-        # print('debug:', type(img), img.shape)
-        # exit()
-        # debug: <class 'torch.Tensor'> torch.Size([7, 3, 800, 1024])
         img = img.cuda()
         img_feats = self.img_backbone(img)
         img_feats = self.img_neck(img_feats) 
@@ -295,43 +302,40 @@ class LaneSegNetTRT(LaneSegNet):
             # len_queue is always none
             img_feats_reshaped.append(img_feat.view(B, int(BN/B),C,H,W))
 
-        #######
+        batchsize = B
+
+        #! ENCODER 
+        bev_feats = self.bev_constructor.forward_trt(img_feats_reshaped,can_bus,lidar2global_rotation)
+
+        #! DECODER
+        outs = self.pts_bbox_head.forward_trt(img_feats_reshaped, bev_feats,can_bus,lidar2global_rotation)
+        """
+        img_metas -> can_bus, lidar2img, img_shape 
+
+        img_shape = img[:-2]
+        """
+        #TODO: rewrite get_lanes DONE
+        lane_results = self.pts_bbox_head.get_lanes(outs, rescale=rescale)
+
+        if self.lclc_head is not None: 
+            lane_feats = outs['history_states'] 
+            # The MLP 
+            lsls_results = self.lclc_head.get_relationship(lane_feats, lane_feats)
+            lsls_results = [result.detach().cpu().numpy() for result in lsls_results] 
+        else: 
+            lsls_results = [None for _ in range(batchsize)]
         
-        results_list = [dict() for i in range(len(img_metas))] 
-
-        # new_prev_bev, lane_results, lsls_results = self.simple_test_pts(
-        #     img_feats, img_metas, img, prev_bev, rescale=rescale
-        # )
-        ####### simple_test_pts function 
-        # batchsize = len(img_metas)
-        # [torch.Size([7, 256, 100, 128]), torch.Size([7, 256, 50, 64]), torch.Size([7, 256, 25, 32]), torch.Size([7, 256, 13, 16])] 
-        # print([feat.shape for feat in img_feats]);exit()
-        bev_feats = self.bev_constructor(img_feats_reshaped, img_metas, prev_bev)
-        outs = self.pts_bbox_head(img_feats_reshaped, bev_feats, img_metas) 
-
-        # lane_results = self.pts_bbox_head.get_lanes(outs, img_metas, rescale=rescale)
-
-        # if self.lclc_head is not None: 
-        #     lane_feats = outs['history_states'] 
-        #     # The MLP 
-        #     lsls_results = self.lclc_head.get_relationship(lane_feats, lane_feats)
-        #     lsls_results = [result.detach().cpu().numpy() for result in lsls_results] 
-        # else: 
-        #     lsls_results = [None for _ in range(batchsize)]
-        
-
         # # return bev_feats, lane_results, lsls_results
         # #######
-
-
-        # for result_dict, lane, lsls in zip(results_list, lane_results, lsls_results): 
-        #     result_dict['lane_results'] = lane 
-        #     result_dict['bbox_results'] = None 
-        #     result_dict['lsls_results'] = lsls 
-        #     result_dict['lste_resutts'] = None 
+        results_list = [dict() for _ in range(B)]
+        for result_dict, lane, lsls in zip(results_list, lane_results, lsls_results): 
+            result_dict['lane_results'] = lane 
+            result_dict['bbox_results'] = None 
+            result_dict['lsls_results'] = lsls 
+            result_dict['lste_resutts'] = None 
         # print(type(outs))
         # exit()
-        outs = self.result_serialize(outs)
+        outs = self.result_serialize(outs) # or results_list
         return outs
 
 

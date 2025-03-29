@@ -10,7 +10,9 @@ import time
 import warnings
 
 import torch
+import sys
 import mmcv
+sys.path.insert(0, os.getcwd())
 from mmcv import Config, DictAction
 from mmcv.cnn import fuse_conv_bn
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
@@ -22,8 +24,6 @@ from mmdet.datasets import replace_ImageToTensor
 from mmdet3d.apis import single_gpu_test
 from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_model
-import sys
-sys.path.insert(0, os.getcwd())
 
 try:
     # If mmdet version > 2.20.0, setup_multi_processes would be imported and
@@ -216,6 +216,10 @@ def main():
         elif hasattr(dataset, 'PALETTE'):
             # segmentation dataset has `PALETTE` attribute
             model.PALETTE = dataset.PALETTE
+
+        # for i, data in enumerate(data_loader):
+        #     print(data)
+        #     exit()
 
         if not distributed:
             model = MMDataParallel(model, device_ids=cfg.gpu_ids)

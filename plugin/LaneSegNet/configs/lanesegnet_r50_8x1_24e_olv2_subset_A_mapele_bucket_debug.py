@@ -163,6 +163,7 @@ model = dict(
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
         bbox_coder=dict(type='LaneSegmentPseudoCoder'),
+        
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,

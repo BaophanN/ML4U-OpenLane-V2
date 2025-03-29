@@ -288,7 +288,7 @@ class CustomCollect3D(object):
                             'img_norm_cfg', 'pcd_trans', 'sample_idx', 'prev_idx', 'next_idx',
                             'pcd_scale_factor', 'pcd_rotation', 'pts_filename',
                             'transformation_3d_flow', 'scene_token',
-                            'can_bus', 'lidar2global_rotation', 'lidar2global_translation','cam_intrinsic'
+                            'can_bus', 'lidar2global_rotation'
                             )):
         self.keys = keys
         self.meta_keys = meta_keys
@@ -360,10 +360,6 @@ class RandomScaleImageMultiViewImage(object):
         scale_factor[1, 1] *= rand_scale
         results['img'] = [mmcv.imresize(img, (x_size[idx], y_size[idx]), return_scale=False) for idx, img in
                           enumerate(results['img'])]
-        # print(results)
-        # print('**********')
-        # print(results['cam_intrinsic'])
-        # exit()
         lidar2img = [scale_factor @ l2i for l2i in results['lidar2img']]
         cam_intrinsic = [scale_factor @ c2i for c2i in results['cam_intrinsic']]
         results['lidar2img'] = lidar2img

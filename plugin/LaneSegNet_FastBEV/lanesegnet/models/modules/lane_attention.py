@@ -16,7 +16,7 @@ from mmcv.cnn.bricks.registry import ATTENTION
 from mmcv.runner.base_module import BaseModule
 from mmcv.ops.multi_scale_deform_attn import multi_scale_deformable_attn_pytorch
 from ....bevformer.modules.multi_scale_deformable_attn_function import MultiScaleDeformableAttnFunction_fp32
-from sys import exit
+
 
 @ATTENTION.register_module()
 class LaneAttention(BaseModule):
@@ -116,10 +116,6 @@ class LaneAttention(BaseModule):
 
         bs, num_query, _ = query.shape
         bs, num_value, _ = value.shape
-        # print("->,spatial_shapes:", spatial_shapes)
-        # print("computed spatial positions:", (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum())
-        # print("num_value:", num_value)
-        # exit()
         assert (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == num_value
 
         value = self.value_proj(value)

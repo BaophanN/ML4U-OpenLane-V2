@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
+clear
 set -x
 
-timestamp=`date +"%y%m%d.%H%M%S"`
+timestamp=$(date +"%y%m%d.%H%M%S")
 
 # WORK_DIR=/workspace/log/work_dirs/pretrained
 # CONFIG=plugin/LaneSegNet/configs/lanesegnet_r50_8x1_24e_olv2_subset_A.py
 # CHECKPOINT=lanesegnet_r50_8x1_24e_olv2_subset_A.pth
 
-WORK_DIR=/workspace/source/work_dirs/lanesegnet_r50_8x1_24e_olv2_subset_A_video_test_mode
+WORK_DIR=work_dirs/LaneSegNet
+
 CONFIG=plugin/LaneSegNet/configs/lanesegnet_r50_8x1_24e_olv2_subset_A.py
-CHECKPOINT=${WORK_DIR}/epoch_14.pth
+CHECKPOINT=lanesegnet_r50_8x1_24e_olv2_subset_A.pth
+# CHECKPOINT=${WORK_DIR}/epoch_14.pth
 
 GPUS=$1
 PORT=${PORT:-28522}

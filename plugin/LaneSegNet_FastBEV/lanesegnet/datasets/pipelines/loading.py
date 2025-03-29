@@ -37,45 +37,6 @@ class CustomLoadMultiViewImageFromFiles(object):
             mean=np.zeros(num_channels, dtype=np.float32),
             std=np.ones(num_channels, dtype=np.float32),
             to_rgb=False)
-        # post add
-        # print('->intrinsic',results['cam_intrinsic'])
-        # print('->extrinsic',results['lidar2img'])
-        
-        # for cam_name, cam_info in results['sensor'].items():
-        #     # Extract intrinsic and extrinsic matrices
-        #     intrinsic = np.array(cam_info['intrinsic']['K'])  # Intrinsic matrix
-        #     extrinsic = cam_info['extrinsic']  # Extrinsic transformation (rotation and translation)
-            
-        #     # Create padded intrinsic matrix for 4x4 compatibility
-        #     intrinsic_padded = np.eye(4)
-        #     intrinsic_padded[:3, :3] = intrinsic
-            
-        #     # Construct the lidar-to-camera matrix (4x4)
-        #     lidar2cam = np.eye(4)
-        #     lidar2cam[:3, :3] = extrinsic['rotation']  # 3x3 rotation matrix
-        #     lidar2cam[:3, 3] = extrinsic['translation']  # Translation vector
-            
-        #     # Construct the lidar-to-image transformation by combining intrinsic and extrinsic matrices
-        #     lidar2img = intrinsic_padded @ lidar2cam
-
-        #     # Append the transformations to lists
-        #     lidar2img_list.append(lidar2img)
-        #     cam_intrinsics_list.append(intrinsic_padded)
-        #     lidar2cam_list.append(lidar2cam)
-
-        # # Update results with lidar2img structure
-        # results['lidar2img'] = {
-        #     'extrinsic': lidar2cam_list,
-        #     'intrinsic': cam_intrinsics_list
-        # } 
-        # a = True
-        # while a: 
-        #     print('lidar2img:', results['lidar2img'])
-        #     print('->keys', results.keys())
-        #     print('scene token', results['scene_token'])
-        #     print('cam intrinsic', results['cam_intrinsic'])
-        #     print('lidar 2 cam', results['lidar2cam'])
-        #     a = False 
         return results
 
     def __repr__(self):

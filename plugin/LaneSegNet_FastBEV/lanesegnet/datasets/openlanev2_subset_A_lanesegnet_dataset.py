@@ -74,6 +74,7 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
             else:
                 data_infos = list(data_infos.values())
         return data_infos
+    
 
     def get_data_info(self, index):
         """Get data info according to the given index.
@@ -90,15 +91,36 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
             sample_idx=info['timestamp'],
             scene_token=info['segment_id']
         )
-
+        print("#",index,info['sensor']);exit()
         if self.modality['use_camera']:
+            # sensor == lidar == ego
             image_paths = []
             lidar2img_rts = []
             lidar2cam_rts = []
             cam_intrinsics = []
+            sensor2egos = []
+            ego2globals = []
             for cam_name, cam_info in info['sensor'].items():
                 image_path = cam_info['image_path']
                 image_paths.append(os.path.join(self.data_root, image_path))
+                # HERE
+                # TODO: sensor->ego
+                w, x, y, z = cam_info['extrinsic']['rotation'] 
+                sensor2ego_rot = torch.Tensor(Quaternion(w,x,y,z).rotation_matrx) 
+                sensor2ego_tran = torch.Tensor(cam_info['extrinsic']['translation'])
+                sensor2ego = sensor2ego_rot.new_zeros((4,4))
+                sensor2ego[3,3] = 1 
+                sensor2ego[:3,:3] = sensor2ego_rot 
+                sensor2ego[:3,-1] = sensor2ego_tran
+                # TODO: ego->global
+                w, x, y, z = info['pose']['rotation']
+                ego2global_rot = torch.Tensor(Quaternion(w,x,y,z).rotation_matrix) 
+                ego2global_tran = torch.Tensor(info['pose']['translation'])
+                ego2global = ego2global_rot.new_zeros((4,4)) 
+                ego2global[3,3] = 1 
+                ego2global[:3,:3] = ego2global_rot
+                ego2global[:3,-1] = ego2global_tran
+
 
                 # obtain lidar to image transformation matrix
                 lidar2cam_r = np.linalg.inv(cam_info['extrinsic']['rotation']) # why invert here?  
@@ -110,22 +132,26 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
                 intrinsic = np.array(cam_info['intrinsic']['K']) # intrinsic and K 
                 viewpad = np.eye(4) # diagonal matrix 
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
-                lidar2img_rt = (viewpad @ lidar2cam_rt.T) # lidar2img = extrinsic = (ego2cam(streamMapNet)) 
+                lidar2img_rt = (viewpad @ lidar2cam_rt.T)
 
                 lidar2img_rts.append(lidar2img_rt)
-                cam_intrinsics.append(viewpad)
-                lidar2cam_rts.append(lidar2cam_rt.T)
 
+                cam_intrinsics.append(viewpad)
+                sensor2egos.append(sensor2ego)
+                ego2globals.append(ego2global)
+            # w, x, y, z = cam
+            """
+            info['pose']: ego2global matrix 
+            info['sensor'][CAM]['extrinsic']: sensor2ego matrix  transformation from camera frame to vehicle frame 
+            """
             input_dict.update(
                 dict(
                     img_filename=image_paths,
-                    lidar2img=lidar2img_rts, # lidar 2 img, rotation translation 
+                    lidar2img=lidar2img_rts,
                     cam_intrinsic=cam_intrinsics,
-                    lidar2cam=lidar2cam_rts, # extrinsic 
-                    # lidar2img=dict(
-                    #     extrinsic=lidar2img_rts,
-                    #     intrinsic=cam_intrinsics
-                    # )
+                    lidar2cam=lidar2cam_rts, # == sensor2ego
+                    sensor2ego=torch.stack(sensor2egos),#HERE
+                    ego2global=torch.stack(ego2globals)
                 ))
 
         if not self.test_mode:
@@ -143,11 +169,11 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
         patch_angle = rotation.yaw_pitch_roll[0] / np.pi * 180
         if patch_angle < 0:
             patch_angle += 360
-        can_bus[-2] = patch_angle / 180 * np.pi # convert to radian 
-        can_bus[-1] = patch_angle # 
-        input_dict['can_bus'] = can_bus 
+        can_bus[-2] = patch_angle / 180 * np.pi
+        can_bus[-1] = patch_angle
+        input_dict['can_bus'] = can_bus
         input_dict['lidar2global_rotation'] = np.array(info['pose']['rotation'])
-        input_dict['lidar2global_translation'] = np.array(info['pose']['translation'])
+
         return input_dict
 
     def ped2lane_segment(self, points):

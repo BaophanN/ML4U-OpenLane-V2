@@ -101,14 +101,14 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
                 image_paths.append(os.path.join(self.data_root, image_path))
 
                 # obtain lidar to image transformation matrix
-                lidar2cam_r = np.linalg.inv(cam_info['extrinsic']['rotation']) # why invert here?  
-                lidar2cam_t = cam_info['extrinsic']['translation'] @ lidar2cam_r.T # translate @ rotate
-                lidar2cam_rt = np.eye(4) # directly get the data 
-                lidar2cam_rt[:3, :3] = lidar2cam_r.T # why transpose?? 
-                lidar2cam_rt[3, :3] = -lidar2cam_t # shape 4x3 -> 3x3: rotation, last: translation
+                lidar2cam_r = np.linalg.inv(cam_info['extrinsic']['rotation'])
+                lidar2cam_t = cam_info['extrinsic']['translation'] @ lidar2cam_r.T
+                lidar2cam_rt = np.eye(4)
+                lidar2cam_rt[:3, :3] = lidar2cam_r.T
+                lidar2cam_rt[3, :3] = -lidar2cam_t
 
-                intrinsic = np.array(cam_info['intrinsic']['K']) # intrinsic and K 
-                viewpad = np.eye(4) # diagonal matrix 
+                intrinsic = np.array(cam_info['intrinsic']['K'])
+                viewpad = np.eye(4)
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = (viewpad @ lidar2cam_rt.T)
 
@@ -134,8 +134,8 @@ class OpenLaneV2_subset_A_LaneSegNet_Dataset(Custom3DDataset):
 
         can_bus = np.zeros(18)
         rotation = Quaternion._from_matrix(np.array(info['pose']['rotation']))
-        can_bus[:3] = info['pose']['translation'] 
-        can_bus[3:7] = rotation 
+        can_bus[:3] = info['pose']['translation']
+        can_bus[3:7] = rotation
         patch_angle = rotation.yaw_pitch_roll[0] / np.pi * 180
         if patch_angle < 0:
             patch_angle += 360

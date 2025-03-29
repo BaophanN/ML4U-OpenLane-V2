@@ -40,7 +40,7 @@ class LaneSegNetDecoder(TransformerLayerSequence):
         intermediate_reference_points = []
         lane_ref_points = reference_points[:, :, self.sample_idx * 2, :]
         for lid, layer in enumerate(self.layers):
-            # BS NUM_QUERY NUM_LEVEL NUM_REF_PTS 3
+            # BS NUM_QUERY NUM_LEVEL NUM_REFPTS 3
             reference_points_input = lane_ref_points[..., :2].unsqueeze(2)
             output = layer(
                 output,
@@ -98,7 +98,6 @@ class LaneSegNetDecoder(TransformerLayerSequence):
 
 @TRANSFORMER_LAYER.register_module()
 class CustomDetrTransformerDecoderLayer(BaseTransformerLayer):
-    # Abstract class 
 
     def __init__(self,
                  attn_cfgs,

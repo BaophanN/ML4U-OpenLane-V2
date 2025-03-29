@@ -177,7 +177,7 @@ class LaneSegHead(AnchorFreeHead):
         def _get_clones(module, N):
             return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
-        self.query_embedding = nn.Embedding(self.num_query, self.embed_dims * 2) # 200, 256*2=512 f
+        self.query_embedding = nn.Embedding(self.num_query, self.embed_dims * 2)
 
         cls_left_type_branch = []
         for _ in range(self.num_reg_fcs):
@@ -239,7 +239,7 @@ class LaneSegHead(AnchorFreeHead):
             mlvl_feats (tuple[Tensor]): Features from the upstream
                 network, each is a 5D-tensor with shape
                 (B, N, C, H, W).
-            prev_bev: previous bev features
+            prev_bev: previous bev featues
             only_bev: only compute BEV features with encoder. 
         Returns:
             all_cls_scores (Tensor): Outputs from the classification head, \
@@ -254,30 +254,9 @@ class LaneSegHead(AnchorFreeHead):
         """
         dtype = mlvl_feats[0].dtype
         object_query_embeds = self.query_embedding.weight.to(dtype)
-        #print('bev_feats shape',bev_feats[0].shape) # [1,256,100,100]
-        #print('bev_feats shape',torch.cat(bev_feats).shape) # [1,2,256,100,100], 
-        #print('mlvl feats enum', [feat.shape for feat in mlvl_feats])
-        """
-            def forward(self,
-                mlvl_feats,
-                #  [torch.Size([7, 256, 100, 128]), 
-                    torch.Size([7, 256, 50, 64]), 
-                    torch.Size([7, 256, 25, 32]), 
-                    torch.Size([7, 256, 13, 16])]
-                bev_embed, # bev_feats after embedded # 1,256,20000 
-                object_query_embed,
-                bev_h,
-                bev_w,
-                reg_branches=None,
-                cls_branches=None,
-                **kwargs):
-        mlvl_feats: list 4 scale features 
-        bev_embed: bev_feats
-        """
-        bev_feats = torch.cat(bev_feats, dim=0)
         outputs = self.transformer(
             mlvl_feats,
-            bev_feats, # from list -> tensor 
+            bev_feats,
             object_query_embeds,
             bev_h=self.bev_h,
             bev_w=self.bev_w,
@@ -285,11 +264,12 @@ class LaneSegHead(AnchorFreeHead):
             cls_branches=None,
             img_metas=img_metas
         )
-        # print"LaneSegHead")  
+        print("LaneSegHead")  
         hs, init_reference, inter_references = outputs
         hs = hs.permute(0, 2, 1, 3)
 
         if not self.training:
+            # inference mode 
             reference = inter_references[-1]
             reference = inverse_sigmoid(reference)
             assert reference.shape[-1] == self.pts_dim
@@ -297,9 +277,7 @@ class LaneSegHead(AnchorFreeHead):
             outputs_class = self.cls_branches[-1](hs[-1])
             output_left_type = self.cls_left_type_branches[-1](hs[-1])
             output_right_type = self.cls_right_type_branches[-1](hs[-1])
-            # # print'outputs_class', outputs_class)
-            # # print'output_left_type', output_left_type)
-            # # print'output_right_type', output_right_type)
+
            
 
             tmp = self.reg_branches[-1](hs[-1])
@@ -307,7 +285,6 @@ class LaneSegHead(AnchorFreeHead):
             tmp = tmp.view(bs, num_query, -1, self.pts_dim)
             tmp = tmp + reference
             tmp = tmp.sigmoid()
-            # # print'tmp', tmp.shape)
 
             coord = tmp.clone()
             coord[..., 0] = coord[..., 0] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0]
@@ -328,7 +305,7 @@ class LaneSegHead(AnchorFreeHead):
             outputs_coords = torch.stack([torch.cat([centerline, left_laneline, right_laneline], axis=-1)])
             output_left_types = torch.stack([output_left_type])
             output_right_types = torch.stack([output_right_type])
-            # # print'outputs_mask', outputs_mask.shape)
+            # print('outputs_mask', outputs_mask.shape)
 
             outs = {
                 'all_cls_scores': outputs_classes,
@@ -357,9 +334,9 @@ class LaneSegHead(AnchorFreeHead):
             outputs_class = self.cls_branches[lvl](hs[lvl])
             output_left_type = self.cls_left_type_branches[lvl](hs[lvl])
             output_right_type = self.cls_right_type_branches[lvl](hs[lvl])
-            # # print'outputs_class', outputs_class.shape)
-            # # print'output_left_type',output_left_type.shape)
-            # # print'output_right_type', output_right_type.shape)
+            print('outputs_class', outputs_class.shape)
+            print('output_left_type',output_left_type.shape)
+            print('output_right_type', output_right_type.shape)
 
             tmp = self.reg_branches[lvl](hs[lvl])
             bs, num_query, _ = tmp.shape
@@ -377,13 +354,13 @@ class LaneSegHead(AnchorFreeHead):
             offset = self.reg_branches_offset[lvl](hs[lvl])
             left_laneline = centerline + offset
             right_laneline = centerline - offset
-            # # print'offset', offset.shape)
-            # # print'left_laneline', left_laneline.shape)
-            # # print'right_laneline', right_laneline.shape)
+            # print('offset', offset.shape)
+            # print('left_laneline', left_laneline.shape)
+            # print('right_laneline', right_laneline.shape)
 
             # segmentation head
             outputs_mask = self._forward_mask_head(hs[lvl], bev_feats, lvl)
-            # # print'outputs_mask', outputs_mask.shape)
+            # print('outputs_mask', outputs_mask.shape)
 
             outputs_classes.append(outputs_class)
             outputs_coord.append(torch.cat([centerline, left_laneline, right_laneline], axis=-1))

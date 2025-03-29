@@ -4,15 +4,15 @@
 #  Modified by Tianyu Li
 # ---------------------------------------------
 from __future__ import division
+from os import path as osp
+import sys
+sys.path.insert(0, '/workspace/source/Mapless')
 import argparse
 import copy
 import os
 import time
 import warnings
-from os import path as osp
 
-import sys
-sys.path.insert(0, os.getcwd())
 import mmcv
 import torch
 import torch.distributed as dist

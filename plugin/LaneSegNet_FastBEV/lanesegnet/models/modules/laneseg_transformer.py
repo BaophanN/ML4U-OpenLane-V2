@@ -55,33 +55,28 @@ class LaneSegNetTransformer(BaseModule):
                 reg_branches=None,
                 cls_branches=None,
                 **kwargs):
-        # #print("LaneSegNetTransformer") 
+        print("LaneSegNetTransformer") 
         bs = mlvl_feats[0].size(0)
         query_pos, query = torch.split(
             object_query_embed, self.embed_dims, dim=1)
-        # #print('query pos', query_pos.shape) 
-        # #print('query', query.shape)
+        print('query pos', query_pos.shape) 
+        print('query', query.shape)
         query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)
         query = query.unsqueeze(0).expand(bs, -1, -1)
         reference_points = self.reference_points(query_pos)
-        # #print('reference_points', reference_points.shape)
+        print('reference_points', reference_points.shape)
 
         # ident init: repeat reference points to num points
         reference_points = reference_points.repeat(1, 1, self.points_num)
         reference_points = reference_points.sigmoid()
         bs, num_query, _ = reference_points.shape
         reference_points = reference_points.view(bs, num_query, self.points_num, self.pts_dim)
-        B,C,H,W = bev_embed.shape
+
         init_reference_out = reference_points
-        bev_embed = bev_embed.reshape(B,-1,C) # [-1,B,C]
-        # #print('init_reference_out', init_reference_out.shape)
+        print('init_reference_out', init_reference_out.shape)
         query = query.permute(1, 0, 2)
         query_pos = query_pos.permute(1, 0, 2)
-        bev_embed = bev_embed.permute(1, 0, 2) # 100x100,1,256 # 1, 100 x 100, 256 
-        #print('->query shape',query.shape)
-        #print('->query_pos shape',query_pos.shape)
-        #print('->bev_embed shape',bev_embed.shape)
-
+        bev_embed = bev_embed.permute(1, 0, 2)
         inter_states, inter_references = self.decoder(
             query=query,
             key=None,
@@ -95,6 +90,6 @@ class LaneSegNetTransformer(BaseModule):
             **kwargs)
 
         inter_references_out = inter_references
-        # #print('inter_references_out', inter_references_out.shape)
+        print('inter_references_out', inter_references_out.shape)
 
         return inter_states, init_reference_out, inter_references_out

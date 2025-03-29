@@ -294,11 +294,11 @@ class CustomMSDeformableAttention(BaseModule):
 
         value = self.value_proj(value)
         if key_padding_mask is not None:
-            value = value.masked_fill(key_padding_mask[..., None], 0.0) # lower triangular matrix 
+            value = value.masked_fill(key_padding_mask[..., None], 0.0)
         value = value.view(bs, num_value, self.num_heads, -1)
 
         sampling_offsets = self.sampling_offsets(query).view(
-            bs, num_query, self.num_heads, self.num_levels, self.num_points, 2) # sampling offsets
+            bs, num_query, self.num_heads, self.num_levels, self.num_points, 2)
         attention_weights = self.attention_weights(query).view(
             bs, num_query, self.num_heads, self.num_levels * self.num_points)
         attention_weights = attention_weights.softmax(-1)

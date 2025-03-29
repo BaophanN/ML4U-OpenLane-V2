@@ -15,5 +15,5 @@ class LaneL1Cost(object):
         self.weight = weight
 
     def __call__(self, lane_pred, gt_lanes):
-        lane_cost = torch.cdist(lane_pred, gt_lanes, p=1) # vector 
+        lane_cost = torch.cdist(lane_pred, gt_lanes, p=1)
         return lane_cost * self.weight

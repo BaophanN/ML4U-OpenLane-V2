@@ -3,7 +3,7 @@ from tqdm import tqdm
 from shapely.geometry import LineString
 from openlanev2.lanesegment.io import io
 import sys
-sys.path.insert(0, '/workspace/source/Mapless')
+
 
 """
 This script is used to collect the data from the original OpenLane-V2 dataset.
@@ -27,7 +27,7 @@ def collect(root_path : str, data_dict : dict, collection : str, n_points : dict
     meta = {}
     for split, segment_id, timestamp in tqdm(data_list, desc=f'collecting {collection}', ncols=100):
         identifier = (split, segment_id, timestamp)
-        frame = io.json_load(f'{root_path}/{split}/{segment_id}/info/{timestamp}-ls.json')
+        frame = io.json_load(f'{root_path}/{split}/{segment_id}/info/{timestamp}.json')
 
         for k, v in frame['pose'].items():
             frame['pose'][k] = np.array(v, dtype=np.float64)
@@ -41,7 +41,10 @@ def collect(root_path : str, data_dict : dict, collection : str, n_points : dict
             continue
 
         # NOTE: We don't interpolate the points for ped crossing and road bouadary.
+        print(frame['annotation'].keys())
+        exit()
         for i, area in enumerate(frame['annotation']['area']):
+            
             frame['annotation']['area'][i]['points'] = np.array(area['points'], dtype=np.float32)
         for i, lane_segment in enumerate(frame['annotation']['lane_segment']):
             frame['annotation']['lane_segment'][i]['centerline'] = _fix_pts_interpolate(np.array(lane_segment['centerline']), n_points['centerline'])
@@ -56,8 +59,8 @@ def collect(root_path : str, data_dict : dict, collection : str, n_points : dict
     io.pickle_dump(f'{root_path}/{collection}.pkl', meta)
 
 if __name__ == '__main__':
-    import sys
-    sys.path.insert(0, '/workspace/source/Mapless')
+    import sys;import os 
+    sys.path.insert(0, os.getcwd())
     root_path = 'data/datasets'
     file = f'{root_path}/data_dict_sample.json'
     subset = 'data_dict_sample'

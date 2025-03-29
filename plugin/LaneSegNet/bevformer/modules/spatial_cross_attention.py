@@ -72,7 +72,7 @@ class SpatialCrossAttention(BaseModule):
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
     
     @force_fp32(apply_to=('query', 'key', 'value', 'query_pos', 'reference_points_cam'))
-    def forward(self,
+    def forward_trt(self,
                 query,
                 key,
                 value,
@@ -119,10 +119,10 @@ class SpatialCrossAttention(BaseModule):
              Tensor: forwarded results with shape [num_query, bs, embed_dims].
         """
 
-        if key is None:
-            key = query
-        if value is None:
-            value = key
+        # if key is None:
+        #     key = query
+        # if value is None:
+        #     value = key
 
         if residual is None:
             inp_residual = query
