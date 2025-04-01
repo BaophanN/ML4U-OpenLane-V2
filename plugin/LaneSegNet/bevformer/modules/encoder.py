@@ -206,7 +206,6 @@ class BEVFormerEncoder(TransformerLayerSequence):
                 bev_pos=None,
                 spatial_shapes=None,
                 level_start_index=None,
-                valid_ratios=None,
                 prev_bev=None,
                 shift=0.,
                 img_shape=None,

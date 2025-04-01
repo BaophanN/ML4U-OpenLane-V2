@@ -265,18 +265,6 @@ class LaneSegNetTRT(LaneSegNet):
                     'history_states']:
             outs_.append(outs[key])
         return outs_
-    def prepare_img_metas(self, img_metas): 
-        # export to onnx with batchsize 1
-        # print(len(img_metas));exit()
-        img_metas_tensors = [] 
-        for key, value in img_metas[0].items(): 
-            if isinstance(value, list): 
-                value_tensors = [torch.tensor(item, dtype=torch.float32) if isinstance(item, np.ndarray) else item for item in value] 
-            elif isinstance(value, np.ndarray): 
-                img_metas_tensors.append(torch.tensor(value, dtype=torch.float32)) 
-            else:
-                img_metas_tensors.append(value)
-        return img_metas_tensors
 
     def forward_trt(
         self,
@@ -292,7 +280,7 @@ class LaneSegNetTRT(LaneSegNet):
             elif img.dim() == 5 and img.size(0) > 1: 
                 B,N,C,H,W = img.size() 
                 img = img.reshape(B*N, C, H, W) 
-        img = img.cuda()
+        # img = img.cuda()
         img_feats = self.img_backbone(img)
         img_feats = self.img_neck(img_feats) 
 
@@ -307,7 +295,7 @@ class LaneSegNetTRT(LaneSegNet):
         #! ENCODER 
         bev_feats = self.bev_constructor.forward_trt(img_feats_reshaped,can_bus,lidar2global_rotation)
 
-        #! DECODER
+        #! DECODER -> lane_head
         outs = self.pts_bbox_head.forward_trt(img_feats_reshaped, bev_feats,can_bus,lidar2global_rotation)
         """
         img_metas -> can_bus, lidar2img, img_shape 

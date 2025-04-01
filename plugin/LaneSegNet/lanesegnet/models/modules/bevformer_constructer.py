@@ -136,13 +136,23 @@ class BEVFormerConstructer(BaseModule):
         for i in range(bs):
             delta_lidar.append(np.linalg.inv(lidar2global_rotation[i]) @ delta_global[i])
         delta_lidar = np.array(delta_lidar)
+        
         shift_y = delta_lidar[:, 1] / self.real_h
         shift_x = delta_lidar[:, 0] / self.real_w
         shift_y = shift_y * self.use_shift
         shift_x = shift_x * self.use_shift
+
+        shift = bev_queries.new_tensor([shift_x,shift_y])
+        
         shift = bev_queries.new_tensor([shift_x, shift_y]).permute(1, 0)  # xy, bs -> bs, xy
         print('############### debug ##############')
-        # print('can_bus:',[each['can_bus'][:3] for each in img_metas])
+
+        ##### (1,3)  (1,3)  (1,3,3)
+        ##### 1       1     1 
+        print(shift.shape)
+        print(delta_global.shape, delta_lidar.shape, lidar2global_rotation.shape)
+        print(len(delta_global), len(delta_lidar), len(lidar2global_rotation))
+
         # print(img_metas)
         print(prev_bev);exit()
         if prev_bev is not None:
@@ -214,7 +224,7 @@ class BEVFormerConstructer(BaseModule):
     def forward_trt(self, mlvl_feats, can_bus, lidar2global_rotation, img_shape=None, use_prev_bev=None):
         """
         TODO: determine the shape of 
-        - can_bus 
+        - can_bus: np.ndarray 
         - lidar2global 
         """
         bs, num_cam, _, _, _ = mlvl_feats[0].shape
@@ -232,19 +242,31 @@ class BEVFormerConstructer(BaseModule):
         # BEVFormer assumes the coords are x-right and y-forward for the nuScenes lidar
         # but OpenLane-V2's coords are x-forward and y-left
         # here is a fix for any lidar coords, the shift is calculated by the rotation matrix
-        delta_global = np.array([single_can_bus for single_can_bus in can_bus])
 
-        # delta_global = np.array([each['can_bus'][:3] for each in img_metas])# what is can_bus 
-        # exit()
+        delta_global = torch.tensor(can_bus[:, :3], dtype=torch.float32, requires_grad=False)
         delta_lidar = []
         for i in range(bs):
-            delta_lidar.append(np.linalg.inv(lidar2global_rotation[i]) @ delta_global[i])
-        delta_lidar = np.array(delta_lidar)
+            inv_rot = torch.inverse(lidar2global_rotation[i])
+            # delta = torch.matmul(inv_rot, delta_global[i])
+            delta = inv_rot @ delta_global[i]
+            delta_lidar.append(delta)
+        delta_lidar = torch.stack(delta_lidar, dim=0)
+        ##### (1,3)  (1,3)  (1,3,3)
+        print(delta_global.shape, delta_lidar.shape, lidar2global_rotation.shape)
+
+
+        
+        # numpy version 
+
         shift_y = delta_lidar[:, 1] / self.real_h
         shift_x = delta_lidar[:, 0] / self.real_w
         shift_y = shift_y * self.use_shift
         shift_x = shift_x * self.use_shift
-        shift = bev_queries.new_tensor([shift_x, shift_y]).permute(1, 0)  # xy, bs -> bs, xy
+
+        # shift = bev_queries.new_tensor([shift_x, shift_y])
+        shift = torch.stack([shift_x, shift_y], dim=0).permute(1,0)
+        # print('##',shift.shape);exit()
+        # shift = bev_queries.new_tensor([shift_x, shift_y]).permute(1, 0)  # xy, bs -> bs, xy
 
         if prev_bev is not None:
             if prev_bev.shape[1] == self.bev_h * self.bev_w:
@@ -261,11 +283,9 @@ class BEVFormerConstructer(BaseModule):
                         self.bev_h * self.bev_w, 1, -1)
                     prev_bev[:, i] = tmp_prev_bev[:, 0]
 
-        # add can bus signals
-        can_bus = bev_queries.new_tensor(
-            [each for each in can_bus])  # [:, :]
+        can_bus = can_bus.unsqueeze(0)
         can_bus = self.can_bus_mlp(can_bus)[None, :, :]
-        bev_queries = bev_queries + can_bus * self.use_can_bus
+        bev_queries = bev_queries + can_bus * int(self.use_can_bus)
 
         feat_flatten = []
         spatial_shapes = []
@@ -306,7 +326,7 @@ class BEVFormerConstructer(BaseModule):
             level_start_index=level_start_index,
             prev_bev=prev_bev,
             shift=shift,
-            can_bus=can_bus, 
-            lidar2_img=lidar2global_rotation,
+            img_shape=img_shape,
+            lidar2img=lidar2global_rotation,
         )
         return bev_embed

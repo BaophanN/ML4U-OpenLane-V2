@@ -41,10 +41,28 @@ def parse_args():
     return args
 
 def prepare_img_metas(img_metas): 
-    can_bus = [each['can_bus'] for each in img_metas]
-    lidar2global_rotation = [each['lidar2global_rotation'] for each in img_metas]
-    # print(type(can_bus), type(lidar2global_rotation))
-    # exit()
+    """
+    img_metas: [{batch1}, {batch_2}]
+
+    can_bus: numpy.ndarray[ 7.14223950e+02  3.03365031e+03 -2.34128162e+01  7.18497279e-01
+    7.18497279e-01  7.18497279e-01  7.18497279e-01  0.00000000e+00
+    0.00000000e+00  0.00000000e+00  0.00000000e+00  0.00000000e+00
+    0.00000000e+00  0.00000000e+00  0.00000000e+00  0.00000000e+00
+    4.74515919e+00  2.71877595e+02]: numpy.ndarray 
+
+    [[ 3.27478053e-02  9.98958447e-01 -3.17742317e-02]
+    [-9.99463461e-01  3.27118481e-02 -1.65095503e-03]
+    [-6.09841631e-04  3.18112488e-02  9.99493708e-01]]
+    lidar2global_rotation: 
+
+
+
+    """
+    can_bus = torch.tensor([meta['can_bus'] for meta in img_metas],  # list of [x, y, z]
+    dtype=torch.float32)
+
+    lidar2global_rotation = torch.tensor([meta['lidar2global_rotation'] for meta in img_metas])
+
     return can_bus, lidar2global_rotation
 def main():
     args = parse_args()
@@ -101,9 +119,9 @@ def main():
         1 sample data: 7 images + meta data 
         """
         # print(type(img.float()));exit()
-        # img = torch.from_numpy(img).float().cuda()
-        # can_bus = torch.from_numpy(can_bus).float().cuda()
-        # lidar2global_rotation = torch.from_numpy(lidar2global_rotation).float().cuda()
+        img = img.cuda()
+        can_bus = can_bus.float().cuda()
+        lidar2global_rotation = lidar2global_rotation.float().cuda()
         with torch.no_grad():
 
             output_names = ['all_cls_scores'
@@ -122,17 +140,18 @@ def main():
             onnx_path = os.path.join(args.work_dir, f"{args.prefix}.onnx")
             torch.onnx.export(
                 model,
-                # (img),
-                (img, can_bus, lidar2global_rotation,), 
+                (img, can_bus, lidar2global_rotation), 
                 'lanesegnet.onnx',
                 onnx_path,
                 opset_version=11,
-                # input_names=['img'],
                 input_names=['img', 'can_bus','lidar2global_rotation'],
                 output_names=output_names,
                 dynamic_axes=dynamic_axes if args.dynamic else None
             )
             print(f"🚀 ONNX model saved to {onnx_path}")
+        img.to('cpu')
+        lidar2global_rotation.to('cpu')
+        can_bus.to('cpu')
         break  # Process only the first batch
 
     # Verify ONNX model
