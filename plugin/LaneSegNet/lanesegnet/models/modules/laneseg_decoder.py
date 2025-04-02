@@ -112,6 +112,7 @@ class LaneSegNetDecoder(TransformerLayerSequence):
         for lid, layer in enumerate(self.layers):
             # BS NUM_QUERY NUM_LEVEL NUM_REFPTS 3
             reference_points_input = lane_ref_points[..., :2].unsqueeze(2)
+            #! WARNING: not use forward_trt here
             output = layer(
                 output,
                 *args,
