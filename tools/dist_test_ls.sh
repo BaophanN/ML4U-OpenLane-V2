@@ -10,7 +10,7 @@ timestamp=$(date +"%y%m%d.%H%M%S")
 
 WORK_DIR=work_dirs/LaneSegNet
 
-CONFIG=plugin/LaneSegNet/configs/lanesegnet_r50_8x1_24e_olv2_subset_A.py
+CONFIG=plugin/LaneSegNet_OG/configs/lanesegnet_r50_8x1_24e_olv2_subset_A.py
 CHECKPOINT=lanesegnet_r50_8x1_24e_olv2_subset_A.pth
 # CHECKPOINT=${WORK_DIR}/epoch_14.pth
 

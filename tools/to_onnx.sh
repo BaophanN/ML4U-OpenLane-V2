@@ -9,4 +9,4 @@ work_dir=work_dirs/LaneSegNet
 # checkpoint=work_dirs/fastbev-r50-cbgs/epoch_20_ema.pth
 # work_dir=work_dirs/
 
-DEUBUG=1 python tools/convert_lanesegnet_to_onnx.py $config $checkpoint $work_dir 
+DEUBUG=1 python tools/convert_lanesegnet_to_onnx.py $config $checkpoint $work_dir --dynamic

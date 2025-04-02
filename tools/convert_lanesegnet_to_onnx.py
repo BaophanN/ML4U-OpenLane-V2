@@ -59,11 +59,17 @@ def prepare_img_metas(img_metas):
 
     """
     can_bus = torch.tensor([meta['can_bus'] for meta in img_metas],  # list of [x, y, z]
-    dtype=torch.float32)
+    dtype=torch.float32, requires_grad=False)
 
-    lidar2global_rotation = torch.tensor([meta['lidar2global_rotation'] for meta in img_metas])
-
-    return can_bus, lidar2global_rotation
+    lidar2global_rotation = torch.tensor([meta['lidar2global_rotation'] for meta in img_metas], requires_grad=False)
+        #!lidar2global rotation != lidar2img
+    # lidar2img = []
+    # for img_meta in img_metas:
+    #     lidar2img.append(img_meta['lidar2img'])
+    # lidar2img = np.asarray(lidar2img)
+    lidar2img = torch.tensor([meta['lidar2img'] for meta in img_metas])  # (B, N, 4, 4)
+    # print(lidar2img.shape);exit()
+    return can_bus, lidar2global_rotation, lidar2img
 def main():
     args = parse_args()
     
@@ -107,7 +113,7 @@ def main():
         img = data['img'].data[0] # Extract first image batch
         # print(type(img))
         # img_metas = model.prepare_img_metas(img_metas)
-        can_bus, lidar2global_rotation = prepare_img_metas(img_metas)
+        can_bus, lidar2global_rotation, lidar2img = prepare_img_metas(img_metas)
 
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
@@ -122,6 +128,7 @@ def main():
         img = img.cuda()
         can_bus = can_bus.float().cuda()
         lidar2global_rotation = lidar2global_rotation.float().cuda()
+        lidar2img = lidar2img.float().cuda()
         with torch.no_grad():
 
             output_names = ['all_cls_scores'
@@ -140,11 +147,11 @@ def main():
             onnx_path = os.path.join(args.work_dir, f"{args.prefix}.onnx")
             torch.onnx.export(
                 model,
-                (img, can_bus, lidar2global_rotation), 
+                (img, can_bus, lidar2global_rotation, lidar2img), 
                 'lanesegnet.onnx',
                 onnx_path,
                 opset_version=11,
-                input_names=['img', 'can_bus','lidar2global_rotation'],
+                input_names=['img', 'can_bus','lidar2global_rotation', 'lidar2img'],
                 output_names=output_names,
                 dynamic_axes=dynamic_axes if args.dynamic else None
             )
@@ -152,6 +159,7 @@ def main():
         img.to('cpu')
         lidar2global_rotation.to('cpu')
         can_bus.to('cpu')
+        print('haha')
         break  # Process only the first batch
 
     # Verify ONNX model
