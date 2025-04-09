@@ -422,7 +422,7 @@ class LaneSegHead(AnchorFreeHead):
             reg_branches=(self.reg_branches, self.reg_branches_offset) if self.with_box_refine else None,  # noqa:E501
         )
 
-        print("LaneSegHead")  
+        print("LaneSegHeadTRT")  
         hs, init_reference, inter_references = outputs
         hs = hs.permute(0, 2, 1, 3)
 

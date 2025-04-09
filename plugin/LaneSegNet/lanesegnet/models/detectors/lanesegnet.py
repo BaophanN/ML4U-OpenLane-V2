@@ -305,24 +305,24 @@ class LaneSegNetTRT(LaneSegNet):
         img_shape = img[:-2]
         """
         #TODO: rewrite get_lanes DONE
-        lane_results = self.pts_bbox_head.get_lanes(outs, rescale=rescale)
+        # lane_results = self.pts_bbox_head.get_lanes(outs, rescale=rescale)
 
-        if self.lclc_head is not None: 
-            lane_feats = outs['history_states'] 
-            # The MLP 
-            lsls_results = self.lclc_head.get_relationship(lane_feats, lane_feats)
-            lsls_results = [result.detach().cpu().numpy() for result in lsls_results] 
-        else: 
-            lsls_results = [None for _ in range(batchsize)]
+        # if self.lclc_head is not None: 
+        #     lane_feats = outs['history_states'] 
+        #     # The MLP 
+        #     lsls_results = self.lclc_head.get_relationship(lane_feats, lane_feats)
+        #     lsls_results = [result.detach().cpu().numpy() for result in lsls_results] 
+        # else: 
+        #     lsls_results = [None for _ in range(batchsize)]
         
-        # # return bev_feats, lane_results, lsls_results
-        # #######
-        results_list = [dict() for _ in range(B)]
-        for result_dict, lane, lsls in zip(results_list, lane_results, lsls_results): 
-            result_dict['lane_results'] = lane 
-            result_dict['bbox_results'] = None 
-            result_dict['lsls_results'] = lsls 
-            result_dict['lste_resutts'] = None 
+        # # # return bev_feats, lane_results, lsls_results
+        # # #######
+        # results_list = [dict() for _ in range(B)]
+        # for result_dict, lane, lsls in zip(results_list, lane_results, lsls_results): 
+        #     result_dict['lane_results'] = lane 
+        #     result_dict['bbox_results'] = None 
+        #     result_dict['lsls_results'] = lsls 
+        #     result_dict['lste_resutts'] = None 
         # print(type(outs))
         # exit()
         outs = self.result_serialize(outs) # or results_list

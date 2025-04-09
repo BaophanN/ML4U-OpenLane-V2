@@ -5,15 +5,35 @@
 # ---------------------------------------------
 
 import torch
+
 from torch.cuda.amp import custom_bwd, custom_fwd
 from torch.autograd.function import Function, once_differentiable
 from mmcv.utils import ext_loader
 ext_module = ext_loader.load_ext(
     '_ext', ['ms_deform_attn_backward', 'ms_deform_attn_forward'])
 
-
+# Torch version 
 class MultiScaleDeformableAttnFunction_fp16(Function):
-
+    """
+    Solution: adds a symbolic function in the relevant class 
+    """
+    @staticmethod
+    def symbolic(
+        g,
+        value,
+        value_spatial_shapes,
+        reference_points,
+        sampling_offsets,
+        attention_weights,
+    ):
+        return g.op(
+            "MultiScaleDeformableAttnTRT",
+            value,
+            value_spatial_shapes,
+            reference_points,
+            sampling_offsets,
+            attention_weights,
+        )
     @staticmethod
     @custom_fwd(cast_inputs=torch.float16)
     def forward(ctx, value, value_spatial_shapes, value_level_start_index,
@@ -88,7 +108,25 @@ class MultiScaleDeformableAttnFunction_fp16(Function):
 
 
 class MultiScaleDeformableAttnFunction_fp32(Function):
-
+    @staticmethod
+    def symbolic(
+        g,
+        value,
+        value_spatial_shapes,
+        reference_points,
+        sampling_offsets,
+        attention_weights,
+        im2col_step
+    ):
+        return g.op(
+            "MultiScaleDeformableAttnTRT",
+            value,
+            value_spatial_shapes,
+            reference_points,
+            sampling_offsets,
+            attention_weights,
+            im2col_step
+        )
     @staticmethod
     @custom_fwd(cast_inputs=torch.float32)
     def forward(ctx, value, value_spatial_shapes, value_level_start_index,
@@ -161,3 +199,5 @@ class MultiScaleDeformableAttnFunction_fp32(Function):
 
         return grad_value, None, None, \
             grad_sampling_loc, grad_attn_weight, None
+
+

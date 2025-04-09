@@ -21,6 +21,7 @@ ext_module = ext_loader.load_ext(
     '_ext', ['ms_deform_attn_backward', 'ms_deform_attn_forward'])
 
 
+
 @ATTENTION.register_module()
 class TemporalSelfAttention(BaseModule):
     """An attention module used in BEVFormer based on Deformable-Detr.
@@ -325,7 +326,11 @@ class TemporalSelfAttention(BaseModule):
             value = torch.stack([query, query], 1).reshape(bs*2, len_bev, c)
 
             # value = torch.cat([query, query], 0)
-
+        # print(torch.cuda.is_available() and value.is_cuda and not torch.onnx.is_in_onnx_export())
+        # print('cuda available',torch.cuda.is_available())
+        # print('cuda value',value.is_cuda) 
+        # print('onnx export',torch.onnx.is_in_onnx_export())
+        # exit()
         if identity is None:
             identity = query
         if query_pos is not None:
@@ -383,20 +388,34 @@ class TemporalSelfAttention(BaseModule):
             raise ValueError(
                 f'Last dim of reference_points must be'
                 f' 2 or 4, but get {reference_points.shape[-1]} instead.')
-        if torch.cuda.is_available() and value.is_cuda:
-
-            # using fp16 deformable attention is unstable because it performs many sum operations
-            if value.dtype == torch.float16:
-                MultiScaleDeformableAttnFunction = MultiScaleDeformableAttnFunction_fp32
-            else:
-                MultiScaleDeformableAttnFunction = MultiScaleDeformableAttnFunction_fp32
+        if torch.cuda.is_available() and value.is_cuda and not torch.onnx.is_in_onnx_export():
+        # if True:
+        #! CHANGE
+        # Use fp32 here because fp16 is unstable
+            print('aaaa')
+            MultiScaleDeformableAttnFunction = MultiScaleDeformableAttnFunction_fp32
             output = MultiScaleDeformableAttnFunction.apply(
-                value, spatial_shapes, level_start_index, sampling_locations,
-                attention_weights, self.im2col_step)
+                value, 
+                spatial_shapes, 
+                level_start_index, 
+                sampling_locations,
+                attention_weights
+                # ,self.im2col_step
+                )
         else:
-
+            print('bbbb')
             output = multi_scale_deformable_attn_pytorch(
-                value, spatial_shapes, sampling_locations, attention_weights)
+                value, 
+                spatial_shapes, 
+                sampling_locations, 
+                attention_weights
+                # num_heads=self.num_heads,
+                # embed_dims=self.embed_dims,
+                # num_levels=self.num_levels,
+                # num_points=self.num_points,
+                # num_queries=int(num_query),
+                # bs=1
+                )
 
         # output shape (bs*num_bev_queue, num_query, embed_dims)
         # (bs*num_bev_queue, num_query, embed_dims)-> (num_query, embed_dims, bs*num_bev_queue)

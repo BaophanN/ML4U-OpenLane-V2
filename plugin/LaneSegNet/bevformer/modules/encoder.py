@@ -146,8 +146,6 @@ class BEVFormerEncoder(TransformerLayerSequence):
         
         #!lidar2global rotation != lidar2img
 
-        
-
         reference_points = reference_points.clone()
 
         reference_points[..., 0:1] = reference_points[..., 0:1] * \
@@ -176,7 +174,7 @@ class BEVFormerEncoder(TransformerLayerSequence):
         eps = 1e-5
 
         bev_mask = (reference_points_cam[..., 2:3] > eps)
-        reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
+        reference_points_cam = reference_points_cam[..., 0:2] / torch.max(
             reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3]) * eps)
 
         reference_points_cam[..., 0] /= img_shape[1]
@@ -187,15 +185,19 @@ class BEVFormerEncoder(TransformerLayerSequence):
                     & (reference_points_cam[..., 1:2] < 1.0)
                     & (reference_points_cam[..., 0:1] < 1.0)
                     & (reference_points_cam[..., 0:1] > 0.0))
-        if digit_version(TORCH_VERSION) >= digit_version('1.8'):
-            # the CHANGE here, change to int
-            bev_mask = torch.nan_to_num(bev_mask).int()
-        else:
-            bev_mask = bev_mask.new_tensor(
-                np.nan_to_num(bev_mask.cpu().numpy()))
+
+        
+        # bev_mask = torch.nan_to_num(bev_mask).int()
+
+        #! CHANGE
+        if not bev_mask.dtype.is_floating_point:
+            bev_mask = bev_mask.to(torch.float32)
+        bev_mask = torch.where(torch.isnan(bev_mask), torch.tensor(0.0, dtype=bev_mask.dtype, device=bev_mask.device), bev_mask)
+        bev_mask = torch.where(bev_mask == float('inf'), torch.tensor(torch.finfo(bev_mask.dtype).max, device=bev_mask.device), bev_mask)
+        bev_mask = torch.where(bev_mask == float('-inf'), torch.tensor(torch.finfo(bev_mask.dtype).min, device=bev_mask.device), bev_mask)
+        bev_mask = bev_mask.int()
 
         reference_points_cam = reference_points_cam.permute(2, 1, 3, 0, 4)
-        # bev_mask = bev_mask.permute(2, 1, 3, 0, 4).squeeze(-1)
         bev_mask = bev_mask.permute(2, 1, 3, 0, 4)[...,0]
 
         return reference_points_cam, bev_mask
